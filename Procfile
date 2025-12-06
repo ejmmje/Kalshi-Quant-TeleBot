@@ -1,1 +1,1 @@
-web: cd telegram_ui && npm start
+web: npm start

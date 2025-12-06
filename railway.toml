@@ -7,7 +7,7 @@ healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-[services.variables]
+[variables]
 PORT = "3001"
 NODE_ENV = "production"
 KALSHI_API_BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"

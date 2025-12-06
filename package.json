@@ -1,0 +1,18 @@
+{
+  "name": "kalshi-tele-bot",
+  "version": "1.0.0",
+  "description": "Kalshi Telegram bot with live data integration",
+  "main": "telegram_ui/telegram_bot.js",
+  "scripts": {
+    "start": "cd telegram_ui && npm start",
+    "build": "cd telegram_ui && npm install",
+    "dev": "cd telegram_ui && npm run dev"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yllvar/kalshi-tele-bot.git"
+  }
+}
