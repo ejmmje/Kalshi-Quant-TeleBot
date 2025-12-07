@@ -96,6 +96,23 @@ Use the inline keyboard below for quick access to common functions.
             this.handleSettingsCommand(msg.chat.id);
         });
 
+        // Set command for individual settings
+        this.bot.onText(/\/set\s+(.+)\s+(.+)/, (msg, match) => {
+            const setting = match[1].trim();
+            const value = match[2].trim();
+            this.handleSetCommand(msg.chat.id, setting, value);
+        });
+
+        // Settings info command
+        this.bot.onText(/\/settings_info/, (msg) => {
+            this.handleSettingsInfoCommand(msg.chat.id);
+        });
+
+        // Confirm settings reset command
+        this.bot.onText(/\/confirm_reset/, (msg) => {
+            this.handleConfirmResetCommand(msg.chat.id);
+        });
+
         // Set Kalshi API key command
         this.bot.onText(/\/set_api_key/, (msg) => {
             const chatId = msg.chat.id;
@@ -155,6 +172,24 @@ Use the inline keyboard below for quick access to common functions.
                     break;
                 case 'settings':
                     this.handleSettingsCommand(chatId);
+                    break;
+                case 'settings_info':
+                    this.handleSettingsInfoCommand(chatId);
+                    break;
+                case 'set_kelly':
+                    this.handleSetKellyPrompt(chatId);
+                    break;
+                case 'set_stop_loss':
+                    this.handleSetStopLossPrompt(chatId);
+                    break;
+                case 'strategy_control':
+                    this.handleStrategyControl(chatId);
+                    break;
+                case 'notification_settings':
+                    this.handleNotificationSettings(chatId);
+                    break;
+                case 'reset_settings':
+                    this.handleResetSettings(chatId);
                     break;
                 case 'help':
                     this.handleHelpCommand(chatId);
@@ -256,21 +291,325 @@ Use the inline keyboard below for quick access to common functions.
     }
 
     async handleSettingsCommand(chatId) {
-        const settingsMessage = `
+        try {
+            // Fetch current settings from the bot interface
+            const settingsResponse = await axios.get(`${this.interfaceBaseUrl}/api/settings`);
+            const settings = settingsResponse.data;
+
+            // Fetch settings info for descriptions
+            const infoResponse = await axios.get(`${this.interfaceBaseUrl}/api/settings/info`);
+            const settingsInfo = infoResponse.data;
+
+            let settingsMessage = '⚙️ *Bot Settings*\n\n';
+            settingsMessage += '*Current Configuration:*\n\n';
+
+            // Format key settings for display
+            const keySettings = [
+                'kelly_fraction', 'max_position_size_pct', 'stop_loss_pct',
+                'news_sentiment_enabled', 'statistical_arbitrage_enabled', 'volatility_based_enabled',
+                'telegram_notifications', 'trade_notifications'
+            ];
+
+            keySettings.forEach(key => {
+                if (settings[key] !== undefined) {
+                    const info = settingsInfo[key] || {};
+                    const value = typeof settings[key] === 'boolean' ?
+                        (settings[key] ? '✅ Enabled' : '❌ Disabled') :
+                        settings[key];
+                    const description = info.description || key;
+                    settingsMessage += `• *${description}:* ${value}\n`;
+                }
+            });
+
+            settingsMessage += '\n';
+            settingsMessage += '*Available Settings Commands:*\n';
+            settingsMessage += 'Use the format: `/set [setting] [value]`\n\n';
+            settingsMessage += '*Examples:*\n';
+            settingsMessage += '• `/set kelly_fraction 0.4` - Set Kelly fraction to 40%\n';
+            settingsMessage += '• `/set stop_loss_pct 3` - Set stop loss to 3%\n';
+            settingsMessage += '• `/set news_sentiment_enabled false` - Disable news sentiment strategy\n';
+            settingsMessage += '• `/set telegram_notifications false` - Disable Telegram notifications\n\n';
+            settingsMessage += '*Strategy Control:*\n';
+            settingsMessage += '• `/set news_sentiment_enabled [true/false]`\n';
+            settingsMessage += '• `/set statistical_arbitrage_enabled [true/false]`\n';
+            settingsMessage += '• `/set volatility_based_enabled [true/false]`\n\n';
+            settingsMessage += '*Risk Management:*\n';
+            settingsMessage += '• `/set kelly_fraction [0.1-1.0]` - Conservative to aggressive\n';
+            settingsMessage += '• `/set max_position_size_pct [1-50]` - Max position size %\n';
+            settingsMessage += '• `/set stop_loss_pct [1-10]` - Stop loss percentage\n\n';
+            settingsMessage += '*For all available settings, see:* `/settings_info`';
+
+            const options = {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: '🔄 Refresh Settings', callback_data: 'settings' },
+                            { text: '📋 Settings Info', callback_data: 'settings_info' }
+                        ],
+                        [
+                            { text: '🔧 Set Kelly Fraction', callback_data: 'set_kelly' },
+                            { text: '🛡️ Set Stop Loss', callback_data: 'set_stop_loss' }
+                        ],
+                        [
+                            { text: '🎯 Strategy Control', callback_data: 'strategy_control' },
+                            { text: '📢 Notification Settings', callback_data: 'notification_settings' }
+                        ],
+                        [
+                            { text: '🔄 Reset to Defaults', callback_data: 'reset_settings' },
+                            { text: '❓ Help', callback_data: 'help' }
+                        ]
+                    ]
+                }
+            };
+
+            this.bot.sendMessage(chatId, settingsMessage, options);
+
+        } catch (error) {
+            console.error('Settings fetch error:', error);
+            // Fallback to basic settings display
+            const fallbackMessage = `
 ⚙️ *Bot Settings*
 
-Current configuration:
-• Max Position Size: 10% of bankroll
-• Stop Loss: 5%
-• News Sentiment Threshold: 60%
-• Statistical Arbitrage Threshold: 5%
-• Volatility Threshold: 10%
+Unable to fetch current settings. The bot interface may not be running.
 
-Use /config [setting] [value] to modify settings.
-Example: /config max_position 15
+*Available Settings Commands:*
+• /set [setting] [value] - Modify individual settings
+• /settings_info - View all available settings
+
+*Examples:*
+• /set kelly_fraction 0.5
+• /set stop_loss_pct 5
+• /set news_sentiment_enabled true
+
+Please ensure the bot interface server is running on ${this.interfaceBaseUrl}
+            `;
+
+            this.bot.sendMessage(chatId, fallbackMessage, { parse_mode: 'Markdown' });
+        }
+    }
+
+    async handleSetCommand(chatId, setting, value) {
+        try {
+            // Parse the value appropriately
+            let parsedValue = value;
+
+            // Convert boolean strings
+            if (value.toLowerCase() === 'true') {
+                parsedValue = true;
+            } else if (value.toLowerCase() === 'false') {
+                parsedValue = false;
+            }
+            // Convert numbers
+            else if (!isNaN(value) && !isNaN(parseFloat(value))) {
+                parsedValue = parseFloat(value);
+                if (parsedValue % 1 === 0) {
+                    parsedValue = parseInt(value); // Convert to int if whole number
+                }
+            }
+
+            // Update the setting
+            const response = await axios.post(`${this.interfaceBaseUrl}/api/settings`, {
+                [setting]: parsedValue
+            });
+
+            if (response.data.success) {
+                this.bot.sendMessage(
+                    chatId,
+                    `✅ Setting updated successfully!\n\n*${setting}:* ${parsedValue}\n\nUse /settings to view all current settings.`,
+                    { parse_mode: 'Markdown' }
+                );
+            } else {
+                this.bot.sendMessage(chatId, `❌ Failed to update setting: ${response.data.error || 'Unknown error'}`);
+            }
+
+        } catch (error) {
+            console.error('Set command error:', error);
+            const message = error?.response?.data?.error || error.message;
+            this.bot.sendMessage(chatId, `❌ Error updating setting: ${message}`);
+        }
+    }
+
+    async handleSettingsInfoCommand(chatId) {
+        try {
+            const response = await axios.get(`${this.interfaceBaseUrl}/api/settings/info`);
+            const settingsInfo = response.data;
+
+            let infoMessage = '📋 *Available Settings*\n\n';
+            infoMessage += 'All configurable bot parameters:\n\n';
+
+            Object.entries(settingsInfo).forEach(([key, info]) => {
+                infoMessage += `*${key}:*\n`;
+                infoMessage += `  Type: ${info.type}\n`;
+                infoMessage += `  Description: ${info.description}\n`;
+                infoMessage += `  Default: ${info.default}\n\n`;
+            });
+
+            infoMessage += '*Usage:*\n';
+            infoMessage += '• `/set [setting] [value]` to modify\n';
+            infoMessage += '• `/settings` to view current values\n';
+            infoMessage += '• Example: `/set kelly_fraction 0.5`';
+
+            this.bot.sendMessage(chatId, infoMessage, { parse_mode: 'Markdown' });
+
+        } catch (error) {
+            console.error('Settings info error:', error);
+            this.bot.sendMessage(chatId, '❌ Unable to fetch settings information. Please ensure the bot interface is running.');
+        }
+    }
+
+    handleSetKellyPrompt(chatId) {
+        const message = `
+🔧 *Set Kelly Fraction*
+
+The Kelly fraction determines position sizing aggressiveness:
+• *0.1-0.3:* Conservative (recommended)
+• *0.4-0.6:* Moderate
+• *0.7-1.0:* Aggressive (high risk)
+
+*Current:* Use /settings to view
+*Default:* 0.5 (50% Kelly)
+
+*Usage:* /set kelly_fraction [value]
+*Example:* /set kelly_fraction 0.4
         `;
-        
-        this.bot.sendMessage(chatId, settingsMessage, { parse_mode: 'Markdown' });
+
+        this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    }
+
+    handleSetStopLossPrompt(chatId) {
+        const message = `
+🛡️ *Set Stop Loss Percentage*
+
+Stop loss protects against excessive losses:
+• *1-3%:* Tight (frequent exits)
+• *3-7%:* Moderate (balanced)
+• *7-10%:* Wide (fewer exits)
+
+*Current:* Use /settings to view
+*Default:* 5%
+
+*Usage:* /set stop_loss_pct [value]
+*Example:* /set stop_loss_pct 3
+        `;
+
+        this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    }
+
+    async handleStrategyControl(chatId) {
+        try {
+            const settingsResponse = await axios.get(`${this.interfaceBaseUrl}/api/settings`);
+            const settings = settingsResponse.data;
+
+            const message = `
+🎯 *Strategy Control*
+
+Enable or disable individual trading strategies:
+
+*News Sentiment Strategy:*
+${settings.news_sentiment_enabled ? '✅' : '❌'} *Enabled*
+• Command: /set news_sentiment_enabled ${!settings.news_sentiment_enabled}
+
+*Statistical Arbitrage Strategy:*
+${settings.statistical_arbitrage_enabled ? '✅' : '❌'} *Enabled*
+• Command: /set statistical_arbitrage_enabled ${!settings.statistical_arbitrage_enabled}
+
+*Volatility-Based Strategy:*
+${settings.volatility_based_enabled ? '✅' : '❌'} *Enabled*
+• Command: /set volatility_based_enabled ${!settings.volatility_based_enabled}
+
+*Quick Commands:*
+• /set news_sentiment_enabled false  (Disable news strategy)
+• /set statistical_arbitrage_enabled false  (Disable arbitrage)
+• /set volatility_based_enabled false  (Disable volatility)
+            `;
+
+            this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+
+        } catch (error) {
+            this.bot.sendMessage(chatId, '❌ Unable to fetch strategy settings.');
+        }
+    }
+
+    async handleNotificationSettings(chatId) {
+        try {
+            const settingsResponse = await axios.get(`${this.interfaceBaseUrl}/api/settings`);
+            const settings = settingsResponse.data;
+
+            const message = `
+📢 *Notification Settings*
+
+Control when the bot sends notifications:
+
+*Telegram Notifications:*
+${settings.telegram_notifications ? '✅' : '❌'} *Enabled*
+• Command: /set telegram_notifications ${!settings.telegram_notifications}
+
+*Trade Notifications:*
+${settings.trade_notifications ? '✅' : '❌'} *Enabled*
+• Command: /set trade_notifications ${!settings.trade_notifications}
+
+*Error Notifications:*
+${settings.error_notifications ? '✅' : '❌'} *Enabled*
+• Command: /set error_notifications ${!settings.error_notifications}
+
+*Performance Alerts:*
+${settings.performance_alerts ? '✅' : '❌'} *Enabled*
+• Command: /set performance_alerts ${!settings.performance_alerts}
+
+*Quick Commands:*
+• /set telegram_notifications false  (Disable all notifications)
+• /set trade_notifications false  (Disable trade alerts)
+            `;
+
+            this.bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+
+        } catch (error) {
+            this.bot.sendMessage(chatId, '❌ Unable to fetch notification settings.');
+        }
+    }
+
+    async handleResetSettings(chatId) {
+        try {
+            const confirmMessage = `
+🔄 *Reset Settings to Defaults*
+
+This will restore all settings to their default values:
+
+• Kelly Fraction: 0.5
+• Stop Loss: 5%
+• All strategies: Enabled
+• Notifications: Enabled
+• Risk parameters: Default values
+
+*Are you sure?* This cannot be undone.
+
+Reply with: \`/confirm_reset\` to proceed
+or \`/cancel\` to abort.
+            `;
+
+            this.bot.sendMessage(chatId, confirmMessage, { parse_mode: 'Markdown' });
+
+        } catch (error) {
+            this.bot.sendMessage(chatId, '❌ Error preparing settings reset.');
+        }
+    }
+
+    async handleConfirmResetCommand(chatId) {
+        try {
+            const response = await axios.post(`${this.interfaceBaseUrl}/api/settings/reset`);
+
+            if (response.data.success) {
+                this.bot.sendMessage(chatId, '✅ Settings have been reset to defaults!\n\nUse /settings to view the updated configuration.');
+            } else {
+                this.bot.sendMessage(chatId, `❌ Failed to reset settings: ${response.data.error || 'Unknown error'}`);
+            }
+
+        } catch (error) {
+            console.error('Settings reset error:', error);
+            const message = error?.response?.data?.error || error.message;
+            this.bot.sendMessage(chatId, `❌ Error resetting settings: ${message}`);
+        }
     }
 
     async handlePerformanceCommand(chatId) {
@@ -307,12 +646,22 @@ Example: /config max_position 15
 /start_trading - Begin automated trading
 /stop_trading - Halt all trading activities
 /settings - View and modify bot configuration
+/set [setting] [value] - Modify individual settings
+/settings_info - View all available settings
+/confirm_reset - Confirm settings reset (use with caution)
 /performance - Detailed performance metrics
 /help - Show this help message
+
+*Settings Examples:*
+• /set kelly_fraction 0.4 - Set conservative position sizing
+• /set stop_loss_pct 3 - Set tighter stop loss
+• /set news_sentiment_enabled false - Disable news strategy
+• /set telegram_notifications false - Disable notifications
 
 *Features:*
 • Advanced quantitative strategies
 • Real-time market monitoring
+• Dynamic settings management
 • Risk management and position sizing
 • News sentiment analysis
 • Statistical arbitrage detection
