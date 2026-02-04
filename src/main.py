@@ -14,6 +14,8 @@ def setup_logging():
 def main():
     logger = setup_logging()
     logger.info("Starting Kalshi Advanced Trading Bot with Phase 3 features")
+    notifier = None
+    trader = None
 
     try:
         api = KalshiAPI(KALSHI_API_KEY)
@@ -31,15 +33,19 @@ def main():
 
     except KeyboardInterrupt:
         logger.info("Bot shutdown requested by user")
-        trader.market_data_streamer.stop_streaming()
+        if trader:
+            trader.market_data_streamer.stop_streaming()
     except Exception as e:
         logger.error(f"An error occurred: {e}")
-        notifier.send_error_notification(str(e))
-        trader.market_data_streamer.stop_streaming()
+        if notifier:
+            notifier.send_error_notification(str(e))
+        if trader:
+            trader.market_data_streamer.stop_streaming()
         raise
     finally:
-        trader.market_data_streamer.stop_streaming()
-        logger.info("Market data streaming stopped")
+        if trader:
+            trader.market_data_streamer.stop_streaming()
+            logger.info("Market data streaming stopped")
 
 if __name__ == "__main__":
     main()

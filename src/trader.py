@@ -77,6 +77,77 @@ class Trader:
         # Enhanced analysis with news sentiment
         return self._make_trade_decision(market_data)
 
+    def run_trading_strategy(self):
+        """
+        Main trading loop execution for the bot.
+        Fetches market data, analyzes signals, and executes trades.
+        """
+        market_data = self.api.get_markets() or {}
+        trade_decision = self.analyze_market(market_data)
+        self.execute_trade(trade_decision)
+
+    def _statistical_arbitrage(self, market_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Prepare market data and identify statistical arbitrage opportunities.
+        """
+        markets_with_history = []
+
+        if self.market_data_streamer.markets_data:
+            for market in self.market_data_streamer.markets_data.values():
+                markets_with_history.append({
+                    'id': market.market_id,
+                    'title': market.title,
+                    'current_price': market.current_price,
+                    'price_history': market.price_history
+                })
+        elif market_data and 'markets' in market_data:
+            for market in market_data.get('markets', []):
+                markets_with_history.append({
+                    'id': market.get('id'),
+                    'title': market.get('title'),
+                    'current_price': market.get('current_price'),
+                    'price_history': market.get('price_history', [])
+                })
+
+        return self.arbitrage_analyzer.find_arbitrage_opportunities(markets_with_history)
+
+    def _volatility_analysis(self, market_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze volatility for a representative market and return a trade decision.
+        """
+        candidate_markets = []
+        if self.market_data_streamer.markets_data:
+            candidate_markets = [
+                {
+                    'id': market.market_id,
+                    'title': market.title,
+                    'current_price': market.current_price,
+                    'price_history': market.price_history
+                }
+                for market in self.market_data_streamer.markets_data.values()
+            ]
+        elif market_data and 'markets' in market_data:
+            candidate_markets = [
+                {
+                    'id': market.get('id'),
+                    'title': market.get('title'),
+                    'current_price': market.get('current_price'),
+                    'price_history': market.get('price_history', [])
+                }
+                for market in market_data.get('markets', [])
+            ]
+
+        if not candidate_markets:
+            return {}
+
+        candidate_markets.sort(key=lambda m: len(m.get('price_history') or []), reverse=True)
+        selected_market = candidate_markets[0]
+
+        volatility_analysis = self.volatility_analyzer.analyze_market_volatility(selected_market)
+        return self.volatility_analyzer.should_trade_based_on_volatility(
+            volatility_analysis, risk_tolerance=self.settings_manager.settings.volatility_threshold
+        )
+
     def _make_trade_decision(self, market_data):
         """
         Enhanced trade decision making with multiple strategies using dynamic settings
@@ -345,5 +416,4 @@ class Trader:
         Get portfolio status with basic risk metrics.
         """
         return self.risk_manager.get_portfolio_status()
-
 
