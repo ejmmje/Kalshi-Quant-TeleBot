@@ -57,6 +57,8 @@ class BotInterface {
                     exchangeStatus: status.exchange_status || {},
                     balanceSummary: status.balance_summary || {},
                     positionsCount: status.positions_count || 0,
+                    activeStrategies: status.active_strategies || [],
+                    tradesCount: status.trades_count || 0,
                     apiConnected: !(status.error),
                 });
             } catch (error) {
@@ -68,7 +70,17 @@ class BotInterface {
         this.app.get('/api/positions', async (req, res) => {
             try {
                 const positions = await this.runBotStateCommand('positions');
-                res.json(positions);
+                const normalizedPositions = (positions.positions || []).map((position) => ({
+                    eventName: position.event_name || position.eventName || position.market_title || position.market_id || 'Unknown',
+                    quantity: position.quantity || position.count || 0,
+                    entryPrice: position.entry_price || position.entryPrice || position.avg_price || 0,
+                    currentPrice: position.current_price || position.currentPrice || position.mark_price || position.last_price || 0,
+                    pnl: position.pnl || position.unrealized_pnl || 0
+                }));
+                res.json({
+                    ...positions,
+                    positions: normalizedPositions
+                });
             } catch (error) {
                 res.status(500).json({ success: false, error: error.message });
             }
@@ -78,7 +90,18 @@ class BotInterface {
         this.app.get('/api/balance', async (req, res) => {
             try {
                 const balance = await this.runBotStateCommand('balance');
-                res.json(balance);
+                const summary = balance.summary || {};
+                res.json({
+                    ...balance,
+                    summary: {
+                        ...summary,
+                        totalEquity: summary.total_equity ?? summary.totalEquity ?? 0,
+                        unrealizedPnL: summary.unrealized_pnl ?? summary.unrealizedPnL ?? 0,
+                        realizedPnL: summary.realized_pnl ?? summary.realizedPnL ?? 0,
+                        todayPnL: summary.today_pnl ?? summary.todayPnL ?? summary.realized_pnl ?? 0,
+                        available: summary.available ?? 0
+                    }
+                });
             } catch (error) {
                 res.status(500).json({ success: false, error: error.message });
             }
@@ -88,7 +111,17 @@ class BotInterface {
         this.app.get('/api/performance', async (req, res) => {
             try {
                 const performance = await this.runBotStateCommand('performance');
-                res.json(performance);
+                res.json({
+                    totalReturn: performance.totalReturn ?? 0,
+                    sharpeRatio: performance.sharpeRatio ?? 0,
+                    maxDrawdown: performance.maxDrawdown ?? 0,
+                    winRate: performance.winRate ?? 0,
+                    totalTrades: performance.totalTrades ?? performance.total_trades ?? 0,
+                    avgTrade: performance.avgTrade ?? 0,
+                    bestTrade: performance.bestTrade ?? 0,
+                    worstTrade: performance.worstTrade ?? 0,
+                    raw: performance
+                });
             } catch (error) {
                 res.status(500).json({ success: false, error: error.message });
             }
@@ -140,7 +173,7 @@ class BotInterface {
         this.app.get('/api/config', async (req, res) => {
             try {
                 // Get current settings from Python bot
-                const config = await this.runBotStateCommand('config');
+                const config = await this.runBotStateCommand('settings');
                 res.json(config);
             } catch (error) {
                 // Fallback to hardcoded defaults if Python bot not available
@@ -576,4 +609,3 @@ if (require.main === module) {
         process.exit(0);
     });
 }
-
