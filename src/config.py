@@ -12,7 +12,7 @@ TELEGRAM_CHAT_ID = _get_env("TELEGRAM_CHAT_ID", "your_chat_id")
 NEWS_API_KEY = _get_env("NEWS_API_KEY", "your_news_api_key")
 NEWS_API_BASE_URL = "https://newsapi.org/v2"
 
-BANKROLL = 1000
+BANKROLL = 200
 RISK_FACTOR = 1.0
 VOLATILITY_PENALTY = True
 MIN_DATA_POINTS = 10
